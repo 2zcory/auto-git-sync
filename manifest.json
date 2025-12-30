@@ -1,0 +1,11 @@
+{
+	"id": "auto-git-sync",
+	"name": "Auto Git Sync",
+	"version": "1.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "Auto Git Sync",
+	"author": "izyroc",
+	"authorUrl": "https://github.com/izyroc",
+	"fundingUrl": "https://github.com/izyroc",
+	"isDesktopOnly": true
+}
