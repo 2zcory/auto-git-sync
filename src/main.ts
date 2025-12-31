@@ -1,55 +1,92 @@
-import { FileSystemAdapter, Notice, Plugin } from 'obsidian';
+import { getTimestampMessage, getVaultPath, isOnline, saveAllMarkdownViews } from 'utils/common';
+import { Notice, Platform, Plugin } from 'obsidian';
 import { SimpleGit, simpleGit } from 'simple-git';
+import { setupIdleSync } from 'utils/setupIdleSync';
+import { AutoGitSyncSettings, DEFAULT_SETTINGS } from 'settings';
+import { AutoGitSyncSettingTab } from 'ui/AutoGitSyncSettingTab';
 
-// Remember to rename these classes and interfaces!
+export default class AutoGitSyncPlugin extends Plugin {
+	settings!: AutoGitSyncSettings;
 
-export default class MyPlugin extends Plugin {
+	private git: SimpleGit | null = null;
+	private disposeIdleSync: (() => void) | null = null;
+
 	async onload() {
-		const adapter = this.app.vault.adapter;
-		// check if the adapter is a FileSystemAdapter
-		if (!(adapter instanceof FileSystemAdapter)) return;
-		const vaultPath = adapter.getBasePath();
-		const git: SimpleGit = simpleGit({ baseDir: vaultPath });
+		await this.loadSettings();
+		this.addSettingTab(new AutoGitSyncSettingTab(this.app, this));
+
+		const online = await isOnline();
+		if (!online) {
+			new Notice('Auto Git Sync failed, you are offline');
+			return;
+		}
+
+		const vaultPath = getVaultPath(this.app);
+		if (!vaultPath) return;
+
+		this.git = simpleGit({ baseDir: vaultPath });
 
 		// try to sync
 		try {
-			const currentBranch = (await git.branchLocal()).current;
-			await git.pull('origin', currentBranch, { '--rebase': 'true' });
+			const currentBranch = (await this.git.branchLocal()).current;
+			await this.git.pull('origin', currentBranch, { '--rebase': 'true' });
 			console.log('Synced successfully');
+			new Notice('Auto Git Sync completed successfully');
 		} catch (error) {
 			console.error('Sync failed', error);
-
-			// show a notice
-			new Notice('Sync failed, please commit/remove your changes first.');
+			new Notice('Auto Git Sync failed');
 		}
 
-		this.addCommand({
-			id: 'auto-git-sync-push',
-			name: 'Auto Git Sync Push',
-			callback: async () => {
-				const adapter = this.app.vault.adapter;
-				if (!(adapter instanceof FileSystemAdapter)) {
-					new Notice('This plugin only works on Desktop version of Obsidian');
-					return;
-				};
-				const vaultPath = adapter.getBasePath();
-				const git: SimpleGit = simpleGit({ baseDir: vaultPath });
-				try {
-					await git.add('.');
-					const timestamp = new Date();
-					const pad = (n: Number) => n.toString().padStart(2, '0');
-					const commitMessage = `Auto commit on ${timestamp.getFullYear()}-${pad(timestamp.getMonth() + 1)}-${pad(timestamp.getDate())} ${pad(timestamp.getHours())}:${pad(timestamp.getMinutes())}:${pad(timestamp.getSeconds())}`;
-					await git.commit(commitMessage);
-					await git.push('origin', (await git.branchLocal()).current);
-					new Notice('Auto Git Sync Push completed successfully');
-				} catch (error) {
-					console.error('Auto Git Sync Push failed', error);
-					new Notice('Auto Git Sync Push failed');
-				}
-			}
-		});
+		await this.applyRuntimeConfig();
+
+		if (Platform.isDesktopApp) {
+			const git = this.git;
+			this.registerEvent(
+				this.app.workspace.on('quit', (tasks) => {
+					const commitAndPushTask = async () => {
+						try {
+							saveAllMarkdownViews(this.app);
+							await git.add('.');
+							await git.commit(getTimestampMessage());
+							await git.push('origin', (await git.branchLocal()).current);
+							console.log('Auto Git Sync Push completed successfully');
+						} catch (error) {
+							console.error('Auto Git Sync Push failed', error);
+						}
+					}
+					tasks.addPromise(commitAndPushTask());
+				})
+			)
+		}
 	}
 
 	onunload() {
+		this.disposeIdleSync?.();
+		this.disposeIdleSync = null;
+	}
+
+	async loadSettings() {
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+
+	async saveSettings() {
+		await this.saveData(this.settings);
+	}
+
+	async applyRuntimeConfig() {
+		this.disposeIdleSync?.();
+		this.disposeIdleSync = null;
+
+		if (!this.git) return;
+
+		if (this.settings.idleSyncEnabled) {
+			this.disposeIdleSync = setupIdleSync({
+				app: this.app,
+				git: this.git,
+				idleMs: this.settings.idleSyncInterval,
+				minIntervalms: 60 * 1000,
+				onlineCacheMs: 30 * 1000,
+			});
+		}
 	}
 }
