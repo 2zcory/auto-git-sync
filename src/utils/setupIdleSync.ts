@@ -10,6 +10,12 @@ export function setupIdleSync(opts: {
     idleMs: number;
     minIntervalms?: number; // throttle: minimum interval between syncs
     onlineCacheMs?: number; // cache online status for this amount of time
+
+    // hooks for sync events
+    onSyncStart?: () => void;
+    onSyncSuccess?: () => void;
+    onSyncSkipped?: (reason: "offline" | "nochange" | "throttled") => void;
+    onSyncFailed?: (err: unknown) => void;
 }): Dispose {
     const {
         app,
@@ -37,29 +43,43 @@ export function setupIdleSync(opts: {
         if (isSyncing) return;
 
         const now = Date.now();
-        if (now - lastSyncAt < minIntervalms) return;
+        if (now - lastSyncAt < minIntervalms) {
+            opts.onSyncSkipped?.("throttled");
+            return;
+        }
 
         isSyncing = true;
+        opts.onSyncStart?.();
 
         try {
             const online = await checkOnlineCached();
-            if (!online) return;
+            if (!online) {
+                opts.onSyncSkipped?.("offline");
+                return;
+            }
 
             const changed = await hasVaultChanged(git);
-            if (!changed) return;
+            if (!changed) {
+                opts.onSyncSkipped?.("nochange");
+                return;
+            }
 
             saveAllMarkdownViews(app);
 
             const changedAfterSave = await hasVaultChanged(git);
-            if (!changedAfterSave) return;
+            if (!changedAfterSave) {
+                opts.onSyncSkipped?.("nochange");
+                return;
+            }
 
             await git.add('.');
             await git.commit(getTimestampMessage());
             await git.push();
 
             lastSyncAt = Date.now();
+            opts.onSyncSuccess?.();
         } catch (e) {
-            console.error('Auto Git Sync Push failed', e);
+            opts.onSyncFailed?.(e);
         } finally {
             isSyncing = false;
         }
