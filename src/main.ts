@@ -98,7 +98,34 @@ export default class AutoGitSyncPlugin extends Plugin {
 	}
 
 	private async commitAndPush(opts: { silent: boolean; reason: "manual" | "quit" }) {
-		await this.performSync({ silent: opts.silent });
+		if (opts.reason === "quit") {
+			await this.performQuitSync();
+		} else {
+			await this.performSync({ silent: opts.silent });
+		}
+	}
+
+	private async performQuitSync() {
+		if (!this.git) return;
+
+		try {
+			const online = await isOnline();
+			if (!online) return;
+
+			saveAllMarkdownViews(this.app);
+
+			const changed = await hasVaultChanged(this.git);
+			if (changed) {
+				await this.git.add('.');
+				const msg = `${getTimestampMessage()} (quit)`;
+				await this.git.commit(msg);
+			}
+
+			const branch = (await this.git.branchLocal()).current;
+			await this.git.raw(['push', 'origin', branch]);
+		} catch (e) {
+			console.warn("Quit sync bypassed safely", e);
+		}
 	}
 
 	private async performSync(opts: { silent: boolean; pullOnly?: boolean }) {
