@@ -155,7 +155,7 @@ export default class AutoGitSyncPlugin extends Plugin {
 
 			// 7. Pull and rebase
 			try {
-				await this.git.raw(['pull', '--rebase', 'origin', branch]);
+				await this.git.raw(['pull', '--rebase', '--autostash', 'origin', branch]);
 			} catch (e) {
 				const conflicted = await getConflictedFiles(this.git);
 				if (conflicted.length > 0) {
