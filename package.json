@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "auto-git-sync",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Obsidian plugin to automatically synchronize vault changes with a remote Git repository.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
