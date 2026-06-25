@@ -49,3 +49,40 @@ export async function hasVaultChanged(git: SimpleGit) {
     const status = await git.status();
     return status.files.length > 0;
 }
+
+export async function checkIsRepo(git: SimpleGit): Promise<boolean> {
+    try {
+        return await git.checkIsRepo();
+    } catch {
+        return false;
+    }
+}
+
+export async function getUnpushedCommitsCount(git: SimpleGit, branch: string): Promise<number> {
+    try {
+        const remoteBranch = `origin/${branch}`;
+        const remotes = await git.branch(['-r']);
+        if (!remotes.all.includes(remoteBranch)) {
+            return 0;
+        }
+        const log = await git.log({ from: remoteBranch, to: branch });
+        return log.total;
+    } catch {
+        return 0;
+    }
+}
+
+export async function squashUnpushedCommits(git: SimpleGit, branch: string): Promise<void> {
+    const remoteBranch = `origin/${branch}`;
+    const count = await getUnpushedCommitsCount(git, branch);
+    if (count <= 1) return;
+
+    await git.reset(['--soft', remoteBranch]);
+    const msg = `${getTimestampMessage()} (squashed)`;
+    await git.commit(msg);
+}
+
+export async function getConflictedFiles(git: SimpleGit): Promise<string[]> {
+    const status = await git.status();
+    return status.conflicted;
+}

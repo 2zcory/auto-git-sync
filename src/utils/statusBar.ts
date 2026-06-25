@@ -1,4 +1,4 @@
-export type SyncPhase = "idle" | "syncing" | "offline" | "failed" | "ok";
+export type SyncPhase = "idle" | "syncing" | "offline" | "failed" | "ok" | "conflict";
 
 export interface StatusState {
     phase: SyncPhase;
@@ -28,34 +28,40 @@ export function createSyncStatusBar(createItem: () => HTMLElement): {
 
         if (phase === "syncing") {
             el.setText("Git: syncing...");
-            el.setAttr("aria-label", "Auto Git Sync: Syncing...");
+            el.setAttr("aria-label", "Auto git sync: syncing...");
 
             return;
         }
 
+        if (phase === "conflict") {
+            el.setText("Git: conflict ⚠️");
+            el.setAttr("aria-label", "Auto git sync: phát hiện xung đột! Click để giải quyết.");
+            return;
+        }
+
         if (phase === "offline") {
-            el.setText(lastSyncAtMs ? `Git: Offline · ${formatAgo(lastSyncAtMs)}` : "Git: Offline");
-            el.setAttr("aria-label", "Auto Git Sync: Offline");
+            el.setText(lastSyncAtMs ? `Git: offline · ${formatAgo(lastSyncAtMs)}` : "Git: offline");
+            el.setAttr("aria-label", "Auto git sync: offline");
 
             return;
         }
 
         if (phase === "failed") {
-            el.setText(lastSyncAtMs ? `Git: Failed · ${formatAgo(lastSyncAtMs)}` : "Git: Failed");
-            el.setAttr("aria-label", `Auto Git Sync: Failed ${lastError ? `: ${lastError}` : ""}`);
+            el.setText(lastSyncAtMs ? `Git: failed · ${formatAgo(lastSyncAtMs)}` : "Git: failed");
+            el.setAttr("aria-label", `Auto git sync: failed ${lastError ? `: ${lastError}` : ""}`);
 
             return;
         }
 
         if (!lastSyncAtMs) {
             el.setText("Git: never synced");
-            el.setAttr("aria-label", "Auto Git Sync: Never synced");
+            el.setAttr("aria-label", "Auto git sync: never synced");
 
             return;
         }
 
         el.setText(`Git: ${formatAgo(lastSyncAtMs)}`);
-        el.setAttr("aria-label", `Auto Git Sync: Last synced ${formatAgo(lastSyncAtMs)}`);
+        el.setAttr("aria-label", `Auto git sync: last synced ${formatAgo(lastSyncAtMs)}`);
     }
 
     const setState = (patch: Partial<StatusState>) => {

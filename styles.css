@@ -1,0 +1,13 @@
+.git-conflict-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.git-conflict-actions {
+    display: flex;
+    justify-content: space-between;
+}
