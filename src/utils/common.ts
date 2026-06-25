@@ -1,6 +1,5 @@
-import { App, FileSystemAdapter } from "obsidian";
+import { App, FileSystemAdapter, requestUrl } from "obsidian";
 import { SimpleGit } from "simple-git";
-import dns from 'dns';
 
 export function getVaultPath(app: App) {
     const adapter = app.vault.adapter;
@@ -9,26 +8,41 @@ export function getVaultPath(app: App) {
 }
 
 export async function isOnline(): Promise<boolean> {
-    return new Promise((resolve) => {
-        dns.lookup('github.com', (err) => {
-            resolve(!err);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return false;
+    }
+    try {
+        const res = await requestUrl({
+            url: 'https://github.com',
+            method: 'HEAD',
+            throw: false,
         });
-    });
+        return res.status >= 200 && res.status < 400;
+    } catch {
+        return false;
+    }
 }
 
 export function getTimestampMessage() {
     const timestamp = new Date();
-    const pad = (n: Number) => n.toString().padStart(2, '0');
+    const pad = (n: number) => n.toString().padStart(2, '0');
     return `Auto commit on ${timestamp.getFullYear()}-${pad(timestamp.getMonth() + 1)}-${pad(timestamp.getDate())} ${pad(timestamp.getHours())}:${pad(timestamp.getMinutes())}:${pad(timestamp.getSeconds())}`;
+}
+
+interface SaveableView {
+    requestSave(): void;
 }
 
 export function saveAllMarkdownViews(app: App) {
     app.workspace.getLeavesOfType('markdown').forEach(leaf => {
         const view = leaf.view;
-
-        // @ts-ignore
-        if (view && view.requestSave) view.requestSave();
-    })
+        if (view) {
+            const saveableView = view as unknown as SaveableView;
+            if (typeof saveableView.requestSave === 'function') {
+                saveableView.requestSave();
+            }
+        }
+    });
 }
 
 export async function hasVaultChanged(git: SimpleGit) {

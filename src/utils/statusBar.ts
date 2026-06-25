@@ -27,35 +27,35 @@ export function createSyncStatusBar(createItem: () => HTMLElement): {
         const { phase, lastSyncAtMs, lastError } = state;
 
         if (phase === "syncing") {
-            el.setText("Git: Syncing...");
-            el.setAttr("arial-label", "Auto Git Sync: Syncing...");
+            el.setText("Git: syncing...");
+            el.setAttr("aria-label", "Auto Git Sync: Syncing...");
 
             return;
         }
 
         if (phase === "offline") {
             el.setText(lastSyncAtMs ? `Git: Offline · ${formatAgo(lastSyncAtMs)}` : "Git: Offline");
-            el.setAttr("arial-label", "Auto Git Sync: Offline");
+            el.setAttr("aria-label", "Auto Git Sync: Offline");
 
             return;
         }
 
         if (phase === "failed") {
             el.setText(lastSyncAtMs ? `Git: Failed · ${formatAgo(lastSyncAtMs)}` : "Git: Failed");
-            el.setAttr("arial-label", `Auto Git Sync: Failed ${lastError ? `: ${lastError}` : ""}`);
+            el.setAttr("aria-label", `Auto Git Sync: Failed ${lastError ? `: ${lastError}` : ""}`);
 
             return;
         }
 
         if (!lastSyncAtMs) {
-            el.setText("Git: Never synced");
-            el.setAttr("arial-label", "Auto Git Sync: Never synced");
+            el.setText("Git: never synced");
+            el.setAttr("aria-label", "Auto Git Sync: Never synced");
 
             return;
         }
 
         el.setText(`Git: ${formatAgo(lastSyncAtMs)}`);
-        el.setAttr("arial-label", `Auto Git Sync: Last synced ${formatAgo(lastSyncAtMs)}`);
+        el.setAttr("aria-label", `Auto Git Sync: Last synced ${formatAgo(lastSyncAtMs)}`);
     }
 
     const setState = (patch: Partial<StatusState>) => {
@@ -69,7 +69,7 @@ export function createSyncStatusBar(createItem: () => HTMLElement): {
     render();
 
     const dispose = () => {
-        timer && window.clearInterval(timer);
+        if (timer) window.clearInterval(timer);
         timer = null;
         el.remove();
     }

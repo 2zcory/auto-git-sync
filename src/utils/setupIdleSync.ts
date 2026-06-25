@@ -20,13 +20,14 @@ export function setupIdleSync(opts: {
     const {
         app,
         git,
+        idleMs: optsIdleMs,
         minIntervalms = 60 * 1000,
         onlineCacheMs = 30 * 1000
     } = opts;
 
-    const idleMs = Math.max(15 * 1000, minIntervalms);
+    const idleMs = Math.max(15 * 1000, optsIdleMs);
 
-    let idleTimeout: NodeJS.Timeout | null = null;
+    let idleTimeout: ReturnType<typeof setTimeout> | null = null;
     let isSyncing = false;
     let lastSyncAt = 0;
 
@@ -74,7 +75,7 @@ export function setupIdleSync(opts: {
 
             await git.add('.');
             await git.commit(getTimestampMessage());
-            await git.push();
+            await git.push('origin', (await git.branchLocal()).current);
 
             lastSyncAt = Date.now();
             opts.onSyncSuccess?.();
@@ -88,7 +89,9 @@ export function setupIdleSync(opts: {
     const schedule = () => {
         if (idleTimeout) clearTimeout(idleTimeout);
 
-        idleTimeout = setTimeout(triggerSync, idleMs);
+        idleTimeout = setTimeout(() => {
+            void triggerSync();
+        }, idleMs);
     }
 
     const events: Array<[string, AddEventListenerOptions | boolean | undefined]> = [

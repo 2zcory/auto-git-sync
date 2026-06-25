@@ -35,8 +35,8 @@ export default class AutoGitSyncPlugin extends Plugin {
 		await this.pullOnLoad();
 
 		this.addCommand({
-			id: 'auto-git-sync-commit-and-push',
-			name: 'Auto Git Sync: Commit and Push',
+			id: 'commit-and-push',
+			name: 'Commit and push',
 			callback: () => this.commitAndPush({ silent: false, reason: "manual" }),
 		});
 
@@ -58,7 +58,7 @@ export default class AutoGitSyncPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()) as AutoGitSyncSettings;
 	}
 
 	async saveSettings() {
@@ -92,18 +92,18 @@ export default class AutoGitSyncPlugin extends Plugin {
 		const online = await isOnline();
 		if (!online) {
 			this.statusBar.setState({ phase: "offline" });
-			new Notice('Auto Git Sync failed, you are offline');
+			new Notice('Sync failed: you are offline');
 			return;
 		}
 
 		try {
 			await this.git.pull('origin', (await this.git.branchLocal()).current);
 			this.markSynced();
-			new Notice('Auto Git Sync completed successfully');
+			new Notice('Sync completed successfully');
 		} catch (e) {
 			this.markFailed(e);
-			new Notice('Auto Git Sync failed');
-			console.error('Auto Git Sync failed', e);
+			new Notice('Sync failed');
+			console.error('Sync failed', e);
 		}
 	}
 
@@ -116,14 +116,14 @@ export default class AutoGitSyncPlugin extends Plugin {
 			const online = await isOnline();
 			if (!online) {
 				this.statusBar.setState({ phase: "offline" });
-				if (!opts.silent) new Notice('Auto Git Sync failed, you are offline');
+				if (!opts.silent) new Notice('Sync failed: you are offline');
 				return;
 			}
 
 			const changed = await hasVaultChanged(this.git);
 			if (!changed) {
 				this.statusBar.setState({ phase: "idle" });
-				if (!opts.silent) new Notice('Auto Git Sync skipped, no changes detected');
+				if (!opts.silent) new Notice('Sync skipped: no changes detected');
 				return;
 			}
 
@@ -132,7 +132,7 @@ export default class AutoGitSyncPlugin extends Plugin {
 			const changedAfterSave = await hasVaultChanged(this.git);
 			if (!changedAfterSave) {
 				this.statusBar.setState({ phase: "idle" });
-				if (!opts.silent) new Notice('Auto Git Sync skipped, no changes detected after saving');
+				if (!opts.silent) new Notice('Sync skipped: no changes detected after saving');
 				return;
 			}
 
@@ -141,11 +141,11 @@ export default class AutoGitSyncPlugin extends Plugin {
 			await this.git.push('origin', (await this.git.branchLocal()).current);
 
 			this.markSynced();
-			if (!opts.silent) new Notice('Auto Git Sync completed successfully');
+			if (!opts.silent) new Notice('Sync completed successfully');
 		} catch (e) {
 			this.markFailed(e);
-			if (!opts.silent) new Notice('Auto Git Sync failed');
-			console.error('Auto Git Sync failed', e);
+			if (!opts.silent) new Notice('Sync failed');
+			console.error('Sync failed', e);
 		}
 	}
 

@@ -14,10 +14,10 @@ export class AutoGitSyncSettingTab extends PluginSettingTab {
 
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: 'Auto Git Sync Settings' });
+        new Setting(containerEl).setName('Git sync').setHeading();
 
         new Setting(containerEl)
-            .setName('Idle Sync')
+            .setName('Idle sync')
             .setDesc('Sync when you are idle')
             .addToggle(toggle => toggle.setValue(this.plugin.settings.idleSyncEnabled).onChange(async (v) => {
                 this.plugin.settings.idleSyncEnabled = v;
@@ -28,7 +28,7 @@ export class AutoGitSyncSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.idleSyncEnabled) {
             new Setting(containerEl)
-                .setName('Idle Sync Interval')
+                .setName('Idle sync interval')
                 .setDesc('Interval between idle syncs')
                 .addDropdown(dropdown => dropdown
                     .addOption((15 * 1000).toString(), '15s')
