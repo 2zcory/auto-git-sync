@@ -1,4 +1,4 @@
-import { getTimestampMessage, getVaultPath, hasVaultChanged, isOnline, saveAllMarkdownViews, checkIsRepo, getUnpushedCommitsCount, squashUnpushedCommits, getConflictedFiles } from 'utils/common';
+import { getVaultPath, hasVaultChanged, isOnline, saveAllMarkdownViews, checkIsRepo, getUnpushedCommitsCount, squashUnpushedCommits, getConflictedFiles, formatCommitMessage } from 'utils/common';
 import { Notice, Platform, Plugin } from 'obsidian';
 import { SimpleGit, simpleGit } from 'simple-git';
 import { setupIdleSync } from 'utils/setupIdleSync';
@@ -40,7 +40,7 @@ export default class AutoGitSyncPlugin extends Plugin {
 
 		// pull on load (non-blocking)
 		this.app.workspace.onLayoutReady(() => {
-			void this.pullOnLoad();
+			void this.startupSync();
 		});
 
 		this.addCommand({
@@ -82,34 +82,39 @@ export default class AutoGitSyncPlugin extends Plugin {
 
 		if (this.settings.idleSyncEnabled) {
 			this.disposeIdleSync = setupIdleSync({
-				app: this.app,
 				git: this.git,
 				idleMs: this.settings.idleSyncInterval,
 				minIntervalms: 60 * 1000,
 				onlineCacheMs: 30 * 1000,
+				connectionCheckUrl: this.settings.connectionCheckUrl,
+				onTriggerSync: () => this.performSync({ silent: true, reason: "idle" })
 			});
 		}
 	}
 
 	// ----------- Core actions integrated with status ----------
 
-	private async pullOnLoad() {
-		await this.performSync({ silent: true, pullOnly: true });
+	private async startupSync() {
+		const mode = this.settings.syncOnStartup;
+		if (mode === "disabled") return;
+
+		const pullOnly = mode === "pull";
+		await this.performSync({ silent: true, pullOnly, reason: "startup" });
 	}
 
-	private async commitAndPush(opts: { silent: boolean; reason: "manual" | "quit" }) {
+	private async commitAndPush(opts: { silent: boolean; reason: "manual" | "quit" | "idle" | "startup" }) {
 		if (opts.reason === "quit") {
 			await this.performQuitSync();
 		} else {
-			await this.performSync({ silent: opts.silent });
+			await this.performSync({ silent: opts.silent, reason: opts.reason });
 		}
 	}
 
 	private async performQuitSync() {
-		if (!this.git) return;
+		if (!this.git || !this.settings.syncOnQuit) return;
 
 		try {
-			const online = await isOnline();
+			const online = await isOnline(this.settings.connectionCheckUrl);
 			if (!online) return;
 
 			saveAllMarkdownViews(this.app);
@@ -117,18 +122,18 @@ export default class AutoGitSyncPlugin extends Plugin {
 			const changed = await hasVaultChanged(this.git);
 			if (changed) {
 				await this.git.add('.');
-				const msg = `${getTimestampMessage()} (quit)`;
+				const msg = formatCommitMessage(this.settings.commitMessageTemplate, "quit");
 				await this.git.commit(msg);
 			}
 
-			const branch = (await this.git.branchLocal()).current;
+			const branch = this.settings.syncBranch || (await this.git.branchLocal()).current;
 			await this.git.raw(['push', 'origin', branch]);
 		} catch (e) {
 			console.warn("Quit sync bypassed safely", e);
 		}
 	}
 
-	private async performSync(opts: { silent: boolean; pullOnly?: boolean }) {
+	private async performSync(opts: { silent: boolean; pullOnly?: boolean; reason?: "manual" | "quit" | "idle" | "startup" }) {
 		if (!this.git) return;
 
 		this.statusBar.setState({ phase: "syncing" });
@@ -152,14 +157,14 @@ export default class AutoGitSyncPlugin extends Plugin {
 			}
 
 			// 3. Check connectivity
-			const online = await isOnline();
+			const online = await isOnline(this.settings.connectionCheckUrl);
 			if (!online) {
 				this.statusBar.setState({ phase: "offline" });
 				if (!opts.silent) new Notice("Đồng bộ thất bại: ngoại tuyến (offline)");
 				return;
 			}
 
-			const branch = (await this.git.branchLocal()).current;
+			const branch = this.settings.syncBranch || (await this.git.branchLocal()).current;
 
 			// 4. Commit local changes if not pullOnly
 			if (!opts.pullOnly) {
@@ -169,7 +174,9 @@ export default class AutoGitSyncPlugin extends Plugin {
 					const changedAfterSave = await hasVaultChanged(this.git);
 					if (changedAfterSave) {
 						await this.git.add('.');
-						await this.git.commit(getTimestampMessage());
+						const reason = opts.reason || "manual";
+						const commitMsg = formatCommitMessage(this.settings.commitMessageTemplate, reason);
+						await this.git.commit(commitMsg);
 					}
 				}
 			}
@@ -178,7 +185,8 @@ export default class AutoGitSyncPlugin extends Plugin {
 			await this.git.raw(['fetch', 'origin']);
 
 			// 6. Squash unpushed commits if > 1
-			await squashUnpushedCommits(this.git, branch);
+			const squashMsg = formatCommitMessage(this.settings.commitMessageTemplate, "squashed");
+			await squashUnpushedCommits(this.git, branch, squashMsg);
 
 			// 7. Pull and rebase
 			try {
@@ -186,6 +194,11 @@ export default class AutoGitSyncPlugin extends Plugin {
 			} catch (e) {
 				const conflicted = await getConflictedFiles(this.git);
 				if (conflicted.length > 0) {
+					if (this.settings.conflictBehavior === "abort") {
+						await this.abortRebase();
+						if (!opts.silent) new Notice("Sync aborted: conflicts detected");
+						return;
+					}
 					this.statusBar.setState({ phase: "conflict" });
 					new Notice("Conflict detected! Click the status bar to resolve.");
 					this.handleConflict(conflicted);
@@ -245,7 +258,7 @@ export default class AutoGitSyncPlugin extends Plugin {
 				if (status.conflicted.length > 0) {
 					void this.handleConflict(status.conflicted);
 				} else {
-					const branch = (await this.git!.branchLocal()).current;
+					const branch = this.settings.syncBranch || (await this.git!.branchLocal()).current;
 					await this.git!.raw(['push', 'origin', branch]);
 					this.markSynced();
 					new Notice('Conflict resolved and synced successfully!');

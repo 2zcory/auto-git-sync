@@ -1,16 +1,16 @@
-import { App } from "obsidian";
 import { SimpleGit } from "simple-git";
-import { getTimestampMessage, hasVaultChanged, isOnline, saveAllMarkdownViews } from "./common";
+import { hasVaultChanged, isOnline } from "./common";
 
 type Dispose = () => void;
 
 export function setupIdleSync(opts: {
-    app: App;
     git: SimpleGit;
     idleMs: number;
     minIntervalms?: number; // throttle: minimum interval between syncs
     onlineCacheMs?: number; // cache online status for this amount of time
+    connectionCheckUrl?: string;
 
+    onTriggerSync: () => Promise<void>;
     // hooks for sync events
     onSyncStart?: () => void;
     onSyncSuccess?: () => void;
@@ -18,7 +18,6 @@ export function setupIdleSync(opts: {
     onSyncFailed?: (err: unknown) => void;
 }): Dispose {
     const {
-        app,
         git,
         idleMs: optsIdleMs,
         minIntervalms = 60 * 1000,
@@ -36,7 +35,7 @@ export function setupIdleSync(opts: {
         const now = Date.now();
         if (now - onlineCache.at < onlineCacheMs) return onlineCache.value;
         onlineCache.at = now;
-        onlineCache.value = await isOnline();
+        onlineCache.value = await isOnline(opts.connectionCheckUrl);
         return onlineCache.value;
     }
 
@@ -65,17 +64,8 @@ export function setupIdleSync(opts: {
                 return;
             }
 
-            saveAllMarkdownViews(app);
-
-            const changedAfterSave = await hasVaultChanged(git);
-            if (!changedAfterSave) {
-                opts.onSyncSkipped?.("nochange");
-                return;
-            }
-
-            await git.add('.');
-            await git.commit(getTimestampMessage());
-            await git.push('origin', (await git.branchLocal()).current);
+            // Call the unified plugin sync logic
+            await opts.onTriggerSync();
 
             lastSyncAt = Date.now();
             opts.onSyncSuccess?.();

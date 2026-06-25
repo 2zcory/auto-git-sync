@@ -1,4 +1,4 @@
-import { App, FileSystemAdapter, requestUrl } from "obsidian";
+import { App, FileSystemAdapter, Platform, requestUrl } from "obsidian";
 import { SimpleGit } from "simple-git";
 
 export function getVaultPath(app: App) {
@@ -7,13 +7,13 @@ export function getVaultPath(app: App) {
     return null;
 }
 
-export async function isOnline(): Promise<boolean> {
+export async function isOnline(checkUrl?: string): Promise<boolean> {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
         return false;
     }
     try {
         const res = await requestUrl({
-            url: 'https://github.com',
+            url: checkUrl || 'https://github.com',
             method: 'HEAD',
             throw: false,
         });
@@ -21,6 +21,23 @@ export async function isOnline(): Promise<boolean> {
     } catch {
         return false;
     }
+}
+
+export function getDeviceName(): string {
+    if (Platform.isMobile) return "Mobile";
+    return "Desktop";
+}
+
+export function formatCommitMessage(template: string, reason: string): string {
+    const timestamp = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const datetimeStr = `${timestamp.getFullYear()}-${pad(timestamp.getMonth() + 1)}-${pad(timestamp.getDate())} ${pad(timestamp.getHours())}:${pad(timestamp.getMinutes())}:${pad(timestamp.getSeconds())}`;
+    const deviceStr = getDeviceName();
+
+    return template
+        .replace(/\{\{datetime\}\}/g, datetimeStr)
+        .replace(/\{\{device\}\}/g, deviceStr)
+        .replace(/\{\{reason\}\}/g, reason);
 }
 
 export function getTimestampMessage() {
@@ -72,13 +89,12 @@ export async function getUnpushedCommitsCount(git: SimpleGit, branch: string): P
     }
 }
 
-export async function squashUnpushedCommits(git: SimpleGit, branch: string): Promise<void> {
+export async function squashUnpushedCommits(git: SimpleGit, branch: string, msg: string): Promise<void> {
     const remoteBranch = `origin/${branch}`;
     const count = await getUnpushedCommitsCount(git, branch);
     if (count <= 1) return;
 
     await git.reset(['--soft', remoteBranch]);
-    const msg = `${getTimestampMessage()} (squashed)`;
     await git.commit(msg);
 }
 
