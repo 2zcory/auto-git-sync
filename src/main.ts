@@ -51,9 +51,14 @@ export default class AutoGitSyncPlugin extends Plugin {
 
 		if (Platform.isDesktopApp) {
 			this.registerEvent(
-				this.app.workspace.on('quit', (tasks) => {
+				this.app.workspace.on('quit', () => {
 					if (!this.git) return;
-					tasks.addPromise(this.commitAndPush({ silent: true, reason: "quit" }));
+					// Fire-and-forget: do NOT use tasks.addPromise() here.
+					// addPromise() hijacks Obsidian's quit cycle, preventing
+					// "Reload App Without Saving" from actually reloading.
+					// Git operations spawn child processes that continue
+					// running independently even after the renderer restarts.
+					void this.commitAndPush({ silent: true, reason: "quit" });
 				})
 			)
 		}
@@ -117,7 +122,10 @@ export default class AutoGitSyncPlugin extends Plugin {
 			const online = await isOnline(this.settings.connectionCheckUrl);
 			if (!online) return;
 
-			saveAllMarkdownViews(this.app);
+			// Do NOT call saveAllMarkdownViews() here.
+			// On normal quit, Obsidian saves files before firing the 'quit' event.
+			// On "Reload App Without Saving", Obsidian intentionally skips saving.
+			// We respect that decision and only commit what is already on disk.
 
 			const changed = await hasVaultChanged(this.git);
 			if (changed) {
